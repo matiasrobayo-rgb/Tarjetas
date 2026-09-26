@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarjetas de respuesta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/cv.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/aruco.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/dictionaries/aruco_4x4_1000.js"></script>
+<style>
+  :root { --tinta:#1B2A4A; --papel:#FBFCFE; --linea:#DCE6F2; --suave:#5B6B86; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'Atkinson Hyperlegible', system-ui, sans-serif; color:var(--tinta); background:var(--papel); }
+  .panel { max-width:640px; margin:0 auto; padding:24px 20px 40px; }
+  h1 { font-size:1.6rem; margin:0 0 6px; }
+  p { color:var(--suave); line-height:1.5; margin:0 0 18px; }
+  .fila { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; margin-bottom:18px; }
+  label { display:flex; flex-direction:column; gap:6px; font-weight:700; font-size:.95rem; }
+  input, select { font:inherit; padding:10px 12px; border:2px solid var(--linea); border-radius:8px; background:#fff; color:var(--tinta); min-width:120px; }
+  button { font:inherit; font-weight:700; padding:12px 20px; border:0; border-radius:8px; background:var(--tinta); color:#fff; cursor:pointer; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid #2F6FDB; outline-offset:2px; }
+  #vista { display:flex; flex-wrap:wrap; gap:12px; padding:0 20px 40px; justify-content:center; }
+  #vista svg { width:200px; height:auto; border:1px solid var(--linea); background:#fff; }
+  @page { size:A4; margin:0; }
+  @media print {
+    body { background:#fff; }
+    .panel { display:none; }
+    #vista { display:block; padding:0; }
+    #vista svg { width:210mm; height:297mm; border:0; page-break-after:always; break-after:page; }
+    #vista svg:last-child { page-break-after:auto; break-after:auto; }
+  }
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1>Tarjetas de respuesta</h1>
+  <p>Cada tarjeta tiene un número y las letras en una orientación distinta. Imprime en papel blanco, sin escalar ("tamaño real"), idealmente en cartulina.</p>
+  <div class="fila">
+    <label>Desde <input id="desde" type="number" min="1" max="50" value="1"></label>
+    <label>Hasta <input id="hasta" type="number" min="1" max="50" value="30"></label>
+    <label>Por hoja
+      <select id="porHoja"><option value="1">1 (más grande)</option><option value="2">2</option></select>
+    </label>
+  </div>
+  <div class="fila">
+    <button id="imprimir">Imprimir tarjetas</button>
+  </div>
+</div>
+<div id="vista"></div>
+
+<script>
+/* ===== Lógica compartida con la vista del docente (debe ser idéntica) ===== */
+const LETRAS = ['A','B','C','D'];
+function desfase(n){ let h=Math.imul(n^0x5bd1e995,0x27d4eb2d); h^=h>>>15; h=Math.imul(h,0x165667b1); h^=h>>>13; return (h>>>0)&3; }
+// Letra en el borde e (0 arriba, 1 izquierda, 2 abajo, 3 derecha) de la tarjeta n
+function letraBorde(n, e){ return LETRAS[(e + desfase(n)) % 4]; }
+AR.DICTIONARIES.TARJETAS = { nBits:16, tau:null, codeList: AR.DICTIONARIES.ARUCO_4X4_1000.codeList.slice(0, 51) };
+const dic = new AR.Dictionary('TARJETAS');
+/* ========================================================================= */
+
+function marcadorSVG(n, x, y, lado){
+  const m = lado / 6, bits = dic.codeList[n];
+  let s = `<rect x="${x}" y="${y}" width="${lado}" height="${lado}" fill="#000"/>`;
+  for (let f = 0; f < 4; f++) for (let c = 0; c < 4; c++)
+    if (bits[f*4+c] === '1') s += `<rect x="${(x+(c+1)*m).toFixed(3)}" y="${(y+(f+1)*m).toFixed(3)}" width="${(m+0.05).toFixed(3)}" height="${(m+0.05).toFixed(3)}" fill="#fff"/>`;
+  return s;
+}
+
+function tarjeta(n, cx, cy, tam){
+  const lado = tam * 0.74, x = cx - lado/2, y = cy - lado/2;
+  const sep = tam * 0.055, fs = tam * 0.045, fn = tam * 0.035;
+  const gris = '#8C95A3';
+  let s = `<rect x="${cx-tam/2}" y="${cy-tam/2}" width="${tam}" height="${tam}" fill="none" stroke="#C9CFD8" stroke-width="0.3" stroke-dasharray="2 2"/>`;
+  s += marcadorSVG(n, x, y, lado);
+  const t = (tx, ty, rot, txt, size, peso) =>
+    `<text x="0" y="0" transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) rotate(${rot})" font-size="${size.toFixed(2)}" font-weight="${peso}" fill="${gris}" text-anchor="middle" dominant-baseline="central" font-family="Atkinson Hyperlegible, Arial, sans-serif">${txt}</text>`;
+  // Letras en el centro de cada borde; legibles cuando ese borde queda arriba
+  s += t(cx, y - sep, 0, letraBorde(n,0), fs, 700);
+  s += t(x - sep, cy, -90, letraBorde(n,1), fs, 700);
+  s += t(cx, y + lado + sep, 180, letraBorde(n,2), fs, 700);
+  s += t(x + lado + sep, cy, 90, letraBorde(n,3), fs, 700);
+  // Número pequeño en las cuatro esquinas
+  const d = lado/2 + sep;
+  [[-1,-1,0],[1,-1,90],[1,1,180],[-1,1,-90]].forEach(([sx,sy,r]) => s += t(cx+sx*d, cy+sy*d, r, n, fn, 400));
+  return s;
+}
+
+function pagina(nums, porHoja){
+  let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 297">';
+  s += '<rect width="210" height="297" fill="#fff"/>';
+  if (porHoja === 1) s += tarjeta(nums[0], 105, 148.5, 196);
+  else nums.forEach((n, i) => s += tarjeta(n, 105, i === 0 ? 74.25 : 222.75, 142));
+  return s + '</svg>';
+}
+
+function generar(){
+  let a = Math.max(1, Math.min(50, +desde.value || 1)), b = Math.max(1, Math.min(50, +hasta.value || 1));
+  if (b < a) [a, b] = [b, a];
+  const porHoja = +document.getElementById('porHoja').value, nums = [];
+  for (let n = a; n <= b; n++) nums.push(n);
+  let html = '';
+  for (let i = 0; i < nums.length; i += porHoja) html += pagina(nums.slice(i, i + porHoja), porHoja);
+  vista.innerHTML = html;
+}
+['desde','hasta','porHoja'].forEach(id => document.getElementById(id).addEventListener('input', generar));
+imprimir.addEventListener('click', () => window.print());
+generar();
+</script>
+</body>
+</html>

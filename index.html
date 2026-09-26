@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1B2A4A">
+<title>Tarjetas · Docente</title>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/cv.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/aruco.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-aruco2@2.0.0/src/dictionaries/aruco_4x4_1000.js"></script>
+<style>
+  :root {
+    --tinta:#1B2A4A; --papel:#FBFCFE; --cuadro:#E4ECF6; --suave:#5B6B86; --blanco:#fff;
+    --A:#2F6FDB; --B:#D9822B; --C:#2E9D6A; --D:#B8457E;
+    --bien:#2E9D6A; --mal:#C8453B; --nada:#AAB4C3; --aviso:#E7A33E;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  [hidden] { display:none !important; }
+  html { scroll-padding-top:env(safe-area-inset-top,0px); }
+  body { margin:0; font-family:'Atkinson Hyperlegible', system-ui, sans-serif; color:var(--tinta); background:var(--papel);
+    padding:env(safe-area-inset-top,0px) 0 calc(env(safe-area-inset-bottom,0px) + 84px); }
+  .pantalla { display:none; max-width:720px; margin:0 auto; padding:16px; }
+  .pantalla.activa { display:block; }
+  h1 { font-size:1.5rem; margin:8px 0 6px; }
+  p.ayuda { color:var(--suave); margin:0 0 18px; line-height:1.45; }
+  label { display:block; font-weight:700; margin:14px 0 6px; }
+  input, select { width:100%; font:inherit; font-size:1rem; padding:12px; border:2px solid var(--cuadro); border-radius:10px; background:var(--blanco); color:var(--tinta); }
+  button { font:inherit; font-weight:700; border:0; border-radius:10px; cursor:pointer; padding:12px 16px; background:var(--cuadro); color:var(--tinta); }
+  button.prim { background:var(--tinta); color:#fff; }
+  button:disabled { opacity:.45; cursor:default; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid var(--A); outline-offset:2px; }
+  .ancho { width:100%; margin-top:18px; padding:14px; font-size:1.05rem; }
+  .modo { display:flex; gap:8px; }
+  .modo button { flex:1; }
+  .modo button[aria-pressed="true"] { background:var(--tinta); color:#fff; }
+  .banner { background:#FFF6E6; border:2px solid var(--aviso); border-radius:12px; padding:14px; margin-bottom:16px; }
+  .banner b { display:block; margin-bottom:8px; }
+
+  /* Sesión */
+  .barra-sup { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .barra-sup .grupo { font-weight:700; font-size:1.1rem; }
+  .barra-sup .prog { color:var(--suave); }
+  .etiqueta { font-size:.8rem; padding:2px 8px; border-radius:99px; background:#FFF6E6; color:#8A5A12; }
+  .camara { position:relative; background:#0E1626; border-radius:14px; overflow:hidden; width:100%; max-height:46vh; margin:0 auto; }
+  .camara video, .camara canvas { position:absolute; inset:0; width:100%; height:100%; }
+  .camara canvas { pointer-events:none; }
+  .camara .msg { position:absolute; inset:0; display:grid; place-items:center; color:#cfd8e6; padding:20px; text-align:center; }
+  .estado-cam { display:flex; align-items:center; gap:10px; margin:10px 0; }
+  .estado-cam .cuenta { font-size:1.6rem; font-weight:700; }
+  .estado-cam .cuenta small { font-size:1rem; font-weight:400; color:var(--suave); }
+  .estado-cam .esp { flex:1; }
+  .reloj { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .reloj.fin { color:var(--mal); }
+  .cerrada { color:var(--mal); font-weight:700; }
+
+  .proy { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin:6px 0 14px; }
+  .proy button { padding:10px 4px; font-size:.85rem; }
+  .proy button[aria-pressed="true"] { background:var(--tinta); color:#fff; }
+  .seccion { font-size:.85rem; color:var(--suave); margin:14px 0 6px; }
+
+  .pregunta { background:var(--blanco); border:2px solid var(--cuadro); border-radius:14px; padding:14px; }
+  .pregunta .txt { font-size:1.1rem; font-weight:700; line-height:1.35; margin-bottom:10px; }
+  .pregunta img { max-width:100%; max-height:180px; display:block; margin-bottom:10px; }
+  .op { display:flex; gap:10px; align-items:flex-start; padding:7px 8px; border-radius:8px; line-height:1.35; }
+  .op .l { flex:none; width:26px; height:26px; border-radius:50%; color:#fff; font-weight:700; display:grid; place-items:center; font-size:.9rem; }
+  .op.ok { background:#E7F5EE; font-weight:700; }
+  .op.ok::after { content:'correcta'; margin-left:auto; font-size:.75rem; color:var(--bien); font-weight:700; }
+  .sig { color:var(--suave); font-size:.9rem; margin-top:8px; }
+
+  .chips { display:grid; grid-template-columns:repeat(auto-fill, minmax(62px,1fr)); gap:6px; }
+  .chip { display:flex; flex-direction:column; align-items:center; padding:6px 2px; border-radius:10px; border:2px solid var(--cuadro); background:var(--blanco); font-weight:400; min-height:58px; }
+  .chip .n { font-size:1.15rem; font-weight:700; }
+  .chip .r { font-size:.8rem; color:var(--suave); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chip.resp { background:#E9F0FB; border-color:var(--A); }
+  .chip.bien { background:#E7F5EE; border-color:var(--bien); }
+  .chip.mal { background:#FBEAE8; border-color:var(--mal); }
+  .chip.aus { background:repeating-linear-gradient(45deg,#F1F4F8,#F1F4F8 6px,#E4E9F0 6px,#E4E9F0 12px); color:var(--suave); }
+  .chip.nuevo { animation:pulso .5s ease; }
+  @keyframes pulso { 50% { transform:scale(1.08); } }
+
+  .acciones { position:fixed; left:0; right:0; bottom:0; background:rgba(251,252,254,.97); border-top:1px solid var(--cuadro);
+    padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 10px); display:flex; gap:8px; justify-content:center; z-index:5; }
+  .acciones button { flex:1; max-width:180px; padding:14px 6px; font-size:.95rem; }
+
+  dialog { border:0; border-radius:16px; padding:18px; width:min(92vw,420px); color:var(--tinta); }
+  dialog::backdrop { background:rgba(27,42,74,.45); }
+  dialog h3 { margin:0 0 4px; }
+  dialog .fila { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  dialog .fila button { flex:1; min-width:60px; }
+  dialog .letras button { color:#fff; font-size:1.2rem; }
+  dialog .letras button[aria-pressed="true"] { outline:4px solid var(--tinta); outline-offset:2px; }
+  #toast { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom,0px) + 96px); background:var(--tinta); color:#fff;
+    padding:10px 16px; border-radius:10px; max-width:90vw; display:none; z-index:10; }
+  .resumen { background:var(--blanco); border:2px solid var(--cuadro); border-radius:14px; padding:16px; line-height:1.5; }
+  @media (prefers-reduced-motion: reduce) { .chip.nuevo { animation:none; } }
+</style>
+</head>
+<body>
+
+<!-- Conexión -->
+<section id="pConexion" class="pantalla">
+  <h1>Conectar con tu hoja</h1>
+  <p class="ayuda">Copia estos datos desde tu Google Sheet: menú Tarjetas → Ver enlace del proyector. Se guardan en este celular.</p>
+  <label for="inApi">URL de la API</label>
+  <input id="inApi" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+  <label for="inClave">Clave</label>
+  <input id="inClave" autocomplete="off">
+  <button class="prim ancho" id="btnConectar">Conectar</button>
+</section>
+
+<!-- Inicio -->
+<section id="pInicio" class="pantalla">
+  <h1>Nueva sesión</h1>
+  <div id="bannerActiva" class="banner" hidden>
+    <b id="txtActiva"></b>
+    <button class="prim" id="btnReanudar">Reanudar sesión</button>
+  </div>
+  <label for="selGrado">Grado</label><select id="selGrado"></select>
+  <label for="selParalelo">Paralelo</label><select id="selParalelo"></select>
+  <label for="selTema">Tema</label><select id="selTema"></select>
+  <label>Tipo de sesión</label>
+  <div class="modo">
+    <button id="mEval" aria-pressed="true">Evaluada</button>
+    <button id="mPrac" aria-pressed="false">Práctica</button>
+  </div>
+  <p class="ayuda" id="ayudaModo" style="margin-top:8px">Se guardan las respuestas y se pueden enviar correos.</p>
+  <button class="prim ancho" id="btnEmpezar">Empezar sesión</button>
+  <button class="ancho" id="btnDesconectar" style="background:transparent;color:var(--suave);margin-top:6px">Cambiar hoja o clave</button>
+</section>
+
+<!-- Sesión -->
+<section id="pSesion" class="pantalla">
+  <div class="barra-sup">
+    <span class="grupo" id="sGrupo"></span>
+    <span class="prog" id="sProg"></span>
+    <span class="etiqueta" id="sModo" hidden>Práctica</span>
+  </div>
+  <div class="camara" id="camara">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div class="msg" id="camMsg">Toca “Activar cámara” para escanear</div>
+  </div>
+  <div class="estado-cam">
+    <button id="btnCam">Activar cámara</button>
+    <span class="esp"></span>
+    <span class="reloj" id="reloj"></span>
+    <span class="cuenta" id="sCuenta"></span>
+  </div>
+  <div id="sCerrada" class="cerrada" hidden>Respuestas cerradas. <button id="btnReabrir" style="padding:6px 10px">Reabrir</button></div>
+
+  <div class="seccion">En el proyector</div>
+  <div class="proy" id="proy">
+    <button data-v="pregunta">Pregunta</button>
+    <button data-v="aciertos">Aciertos</button>
+    <button data-v="opciones">Por opción</button>
+    <button data-v="ranking">Ranking</button>
+    <button data-v="espera">Pausa</button>
+  </div>
+
+  <div class="pregunta" id="sPregunta"></div>
+
+  <div class="seccion">Alumnos · toca uno para corregir o marcar ausente</div>
+  <div class="chips" id="chips"></div>
+
+  <button class="ancho" id="btnFinalizar" style="background:transparent;border:2px solid var(--mal);color:var(--mal);margin-top:22px">Finalizar sesión</button>
+</section>
+
+<!-- Fin -->
+<section id="pFin" class="pantalla">
+  <h1>Sesión finalizada</h1>
+  <div class="resumen" id="finResumen"></div>
+  <button class="prim ancho" id="btnNueva">Nueva sesión</button>
+</section>
+
+<div class="acciones" id="acciones" hidden>
+  <button id="btnRepetir">Repetir</button>
+  <button id="btnTimer">Temporizador</button>
+  <button class="prim" id="btnSiguiente">Siguiente</button>
+</div>
+
+<dialog id="dlg">
+  <h3 id="dNombre"></h3>
+  <div style="color:var(--suave)" id="dTarjeta"></div>
+  <div class="fila letras" id="dLetras"></div>
+  <div class="fila">
+    <button id="dBorrar">Borrar respuesta</button>
+    <button id="dAusente"></button>
+  </div>
+  <div class="fila"><button class="prim" id="dCerrar">Listo</button></div>
+</dialog>
+<div id="toast" role="status"></div>
+
+<script>
+/* ===== Lógica compartida con el generador de tarjetas (debe ser idéntica) ===== */
+const LETRAS = ['A','B','C','D'];
+function desfase(n){ let h=Math.imul(n^0x5bd1e995,0x27d4eb2d); h^=h>>>15; h=Math.imul(h,0x165667b1); h^=h>>>13; return (h>>>0)&3; }
+AR.DICTIONARIES.TARJETAS = { nBits:16, tau:null, codeList: AR.DICTIONARIES.ARUCO_4X4_1000.codeList.slice(0, 51) };
+/* ============================================================================= */
+const detector = new AR.Detector({ dictionaryName:'TARJETAS', maxHammingDistance:2 });
+function rotacion(c){ const dx=c[1].x-c[0].x, dy=c[1].y-c[0].y; return ((Math.round(Math.atan2(dy,dx)/(Math.PI/2))%4)+4)%4; }
+function letraLeida(id, c){ return LETRAS[(rotacion(c) + desfase(id)) % 4]; }
+
+const $ = id => document.getElementById(id);
+const COLOR = { A:'var(--A)', B:'var(--B)', C:'var(--C)', D:'var(--D)' };
+let API = '', CLAVE = '', CAT = null, CFG = {}, E = null, resp = {}, modo = 'evaluado';
+let desfaseReloj = 0, escaneando = false, stream = null, lecturas = {}, envioT = null, wake = null;
+
+/* ---------- utilidades ---------- */
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(t, ms=2800){ const el=$('toast'); el.textContent=t; el.style.display='block'; clearTimeout(el._t); el._t=setTimeout(()=>el.style.display='none', ms); }
+function mostrar(id){ document.querySelectorAll('.pantalla').forEach(p=>p.classList.toggle('activa', p.id===id)); $('acciones').hidden = id!=='pSesion'; }
+function mat(el){ if (window.renderMathInElement) renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false}); }
+function guardarLocal(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function leerLocal(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
+
+async function api(accion, datos={}){
+  const r = await fetch(API, { method:'POST', body: JSON.stringify(Object.assign({ k:CLAVE, accion }, datos)) });
+  if (!r.ok) throw new Error('El servidor respondió ' + r.status);
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Error desconocido');
+  return j;
+}
+
+/* ---------- conexión ---------- */
+async function conectar(){
+  API = $('inApi').value.trim(); CLAVE = $('inClave').value.trim();
+  if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(API)) return toast('La URL debe empezar con https://script.google.com/');
+  $('btnConectar').disabled = true;
+  try {
+    CAT = await api('catalogo');
+    CFG = CAT.config;
+    guardarLocal('api', API); guardarLocal('clave', CLAVE);
+    prepararInicio();
+    mostrar('pInicio');
+  } catch(e){ toast('No se pudo conectar: ' + e.message, 5000); }
+  $('btnConectar').disabled = false;
+}
+
+function prepararInicio(){
+  const grados = Object.keys(CAT.grados).sort();
+  $('selGrado').innerHTML = grados.map(g=>`<option>${esc(g)}</option>`).join('');
+  const g0 = leerLocal('ultGrado'); if (grados.includes(g0)) $('selGrado').value = g0;
+  cambiarGrado();
+  if (CAT.activa){
+    const a = CAT.activa;
+    $('txtActiva').textContent = `Sesión en curso: ${a.grado} ${a.paralelo}, ${a.tema} (pregunta ${a.idx+1} de ${a.total})`;
+    $('bannerActiva').hidden = false;
+  } else $('bannerActiva').hidden = true;
+}
+function cambiarGrado(){
+  const g = CAT.grados[$('selGrado').value] || { paralelos:[], temas:{} };
+  $('selParalelo').innerHTML = g.paralelos.sort().map(p=>`<option>${esc(p)}</option>`).join('');
+  $('selTema').innerHTML = Object.keys(g.temas).sort().map(t=>`<option value="${esc(t)}">${esc(t)} (${g.temas[t]})</option>`).join('');
+}
+function elegirModo(m){
+  modo = m;
+  $('mEval').setAttribute('aria-pressed', m==='evaluado'); $('mPrac').setAttribute('aria-pressed', m==='practica');
+  $('ayudaModo').textContent = m==='evaluado' ? 'Se guardan las respuestas y se pueden enviar correos.' : 'No se guarda nada ni se envían correos. Ideal para repasar.';
+}
+
+async function empezar(){
+  if (!$('selTema').value || !$('selParalelo').value) return toast('Falta elegir paralelo o tema');
+  $('btnEmpezar').disabled = true;
+  try {
+    guardarLocal('ultGrado', $('selGrado').value);
+    const j = await api('iniciar', { grado:$('selGrado').value, paralelo:$('selParalelo').value, tema:$('selTema').value, modo });
+    entrarSesion(j.estado);
+  } catch(e){ toast(e.message, 5000); }
+  $('btnEmpezar').disabled = false;
+}
+async function reanudar(){
+  try { const j = await api('estado'); entrarSesion(j.estado); } catch(e){ toast(e.message); }
+}
+function entrarSesion(est){
+  aplicar(est);
+  mostrar('pSesion');
+  activarCamara();
+  pedirWakeLock();
+}
+
+/* ---------- estado ---------- */
+function aplicar(est){
+  const cambioPregunta = !E || E.idx !== est.idx || E.id !== est.id;
+  E = est;
+  desfaseReloj = est.ahora - Date.now();
+  resp = Object.assign({}, est.resp);
+  if (cambioPregunta) lecturas = {};
+  render(cambioPregunta);
+}
+
+function abierta(){
+  if (!E || !E.abierta) return false;
+  if (E.timerFin && Date.now() + desfaseReloj > E.timerFin) return false;
+  return true;
+}
+
+function render(cambioPregunta){
+  $('sGrupo').textContent = `${E.grado} ${E.paralelo} · ${E.tema}`;
+  $('sProg').textContent = `Pregunta ${E.idx+1} de ${E.total}`;
+  $('sModo').hidden = E.modo !== 'practica';
+  document.querySelectorAll('#proy button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.v===E.vista));
+  $('sCerrada').hidden = E.abierta;
+  $('btnSiguiente').textContent = E.idx >= E.total-1 ? 'Finalizar' : 'Siguiente';
+  $('btnTimer').textContent = E.timerFin ? 'Detener reloj' : `Reloj ${CFG.temporizadorSeg||30} s`;
+  if (cambioPregunta){
+    const q = E.pregunta;
+    $('sPregunta').innerHTML = q ? `<div class="txt">${esc(q.p)}</div>${q.img?`<img src="${esc(q.img)}" alt="">`:''}
+      ${Object.keys(q.op).map(L=>`<div class="op ${L===q.ok?'ok':''}"><span class="l" style="background:${COLOR[L]}">${L}</span><span>${esc(q.op[L])}</span></div>`).join('')}
+      ${E.siguiente?`<div class="sig">Siguiente: ${esc(E.siguiente.p)}</div>`:'<div class="sig">Es la última pregunta.</div>'}` : '';
+    mat($('sPregunta'));
+  }
+  renderChips();
+  reloj();
+}
+
+function renderChips(nuevo){
+  const ok = E.pregunta && E.pregunta.ok;
+  const presentes = E.alumnos.filter(a=>!E.ausentes.includes(a.t));
+  const n = presentes.filter(a=>resp[a.t]).length;
+  $('sCuenta').innerHTML = `${n}<small> de ${presentes.length}</small>`;
+  $('chips').innerHTML = E.alumnos.map(a=>{
+    const aus = E.ausentes.includes(a.t), r = resp[a.t];
+    let cls = 'chip';
+    if (aus) cls += ' aus'; else if (r) cls += ok ? (r===ok?' bien':' mal') : ' resp';
+    if (nuevo && nuevo.includes(a.t)) cls += ' nuevo';
+    const corto = a.n.split(' ')[0];
+    return `<button class="${cls}" data-t="${a.t}" aria-label="${esc(a.n)}"><span class="n">${a.t}${r&&!aus?' · '+r:''}</span><span class="r">${aus?'ausente':esc(corto)}</span></button>`;
+  }).join('');
+}
+
+function reloj(){
+  if (!E) return;
+  const el = $('reloj');
+  if (!E.timerFin){ el.textContent=''; return; }
+  const s = Math.max(0, Math.ceil((E.timerFin - (Date.now()+desfaseReloj))/1000));
+  el.textContent = s>0 ? s+' s' : 'Tiempo';
+  el.classList.toggle('fin', s<=5);
+}
+setInterval(reloj, 250);
+
+/* ---------- envío de respuestas ---------- */
+let pendiente = false;
+function programarEnvio(manual){
+  pendiente = true;
+  clearTimeout(envioT);
+  envioT = setTimeout(()=>enviar(manual), manual ? 100 : 700);
+}
+async function enviar(manual){
+  if (!E) return;
+  pendiente = false; clearTimeout(envioT);
+  try {
+    const j = await api('respuestas', { idx:E.idx, resp, manual:!!manual });
+    if (j.ignorado && j.idx !== undefined && j.idx !== E.idx) refrescar();
+  } catch(e){ toast('Sin conexión, reintentando…'); programarEnvio(manual); throw e; }
+}
+// Envía lo pendiente antes de cualquier acción que devuelva el estado del servidor
+async function vaciar(){ if (pendiente) await enviar(true); }
+async function refrescar(){ try { await vaciar(); const j = await api('estado'); aplicar(j.estado); } catch(e){} }
+
+/* ---------- cámara ---------- */
+async function activarCamara(){
+  if (stream) return;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio:false, video:{ facingMode:'environment', width:{ideal:1920}, height:{ideal:1080} } });
+    const v = $('video');
+    v.srcObject = stream; await v.play();
+    $('camMsg').hidden = true;
+    const ajustar = () => { if (v.videoWidth) $('camara').style.aspectRatio = v.videoWidth + ' / ' + v.videoHeight; };
+    ajustar(); v.addEventListener('resize', ajustar);
+    escaneando = true; $('btnCam').textContent = 'Pausar cámara';
+    bucle();
+  } catch(e){
+    stream = null;
+    $('camMsg').hidden = false;
+    $('camMsg').textContent = 'No se pudo abrir la cámara (' + e.name + '). Revisa el permiso del navegador y toca “Activar cámara”.';
+  }
+}
+function alternarCamara(){
+  if (!stream) return activarCamara();
+  escaneando = !escaneando;
+  $('btnCam').textContent = escaneando ? 'Pausar cámara' : 'Reanudar cámara';
+  if (escaneando){ $('video').play(); bucle(); } else { $('video').pause(); limpiarOverlay(); }
+}
+
+const lienzo = document.createElement('canvas'), ctxL = lienzo.getContext('2d', { willReadFrequently:true });
+function limpiarOverlay(){ const o=$('overlay'); o.getContext('2d').clearRect(0,0,o.width,o.height); }
+
+function bucle(){
+  if (!escaneando) return;
+  const v = $('video');
+  if (v.readyState >= 2 && v.videoWidth){
+    const esc2 = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+    const w = Math.round(v.videoWidth*esc2), h = Math.round(v.videoHeight*esc2);
+    if (lienzo.width !== w){ lienzo.width = w; lienzo.height = h; }
+    ctxL.drawImage(v, 0, 0, w, h);
+    let marcas = [];
+    try { marcas = detector.detect(ctxL.getImageData(0,0,w,h)); } catch(e){}
+    procesar(marcas, w, h);
+  }
+  setTimeout(bucle, 40);
+}
+
+function procesar(marcas, w, h){
+  const o = $('overlay'); if (o.width!==w){ o.width=w; o.height=h; }
+  const c = o.getContext('2d'); c.clearRect(0,0,w,h);
+  if (!E) return;
+  const abierto = abierta(), vistos = new Set(), nuevos = [];
+  for (const m of marcas){
+    const t = m.id, alumno = E.alumnos.find(a=>a.t===t);
+    if (vistos.has(t)) continue; vistos.add(t);
+    const L = letraLeida(t, m.corners);
+    const valido = alumno && !E.ausentes.includes(t) && E.pregunta && L in E.pregunta.op;
+    const prev = lecturas[t];
+    lecturas[t] = { L, n: prev && prev.L===L ? prev.n+1 : 1 };
+    if (valido && abierto && lecturas[t].n >= 2 && resp[t] !== L){ resp[t] = L; nuevos.push(t); }
+    // dibujo
+    c.lineWidth = Math.max(3, w/260);
+    c.strokeStyle = !valido ? '#E7A33E' : (resp[t]===L ? '#2E9D6A' : '#FFFFFF');
+    c.beginPath(); m.corners.forEach((p,i)=> i ? c.lineTo(p.x,p.y) : c.moveTo(p.x,p.y)); c.closePath(); c.stroke();
+    const cx = m.corners.reduce((s,p)=>s+p.x,0)/4, cy = m.corners.reduce((s,p)=>s+p.y,0)/4;
+    const fs = Math.max(16, w/24);
+    c.font = `700 ${fs}px Atkinson Hyperlegible, sans-serif`; c.textAlign='center'; c.textBaseline='middle';
+    const txt = valido ? `${t} ${L}` : `${t} ?`;
+    const tw = c.measureText(txt).width + fs*0.6;
+    c.fillStyle = 'rgba(14,22,38,.8)'; c.fillRect(cx-tw/2, cy-fs*0.7, tw, fs*1.4);
+    c.fillStyle = '#fff'; c.fillText(txt, cx, cy);
+  }
+  Object.keys(lecturas).forEach(t=>{ if (!vistos.has(+t)) delete lecturas[t]; });
+  if (nuevos.length){
+    if (navigator.vibrate) navigator.vibrate(12);
+    renderChips(nuevos);
+    programarEnvio(false);
+  }
+}
+
+/* ---------- controles ---------- */
+async function control(op, extra={}){
+  try {
+    await vaciar();
+    const j = await api('control', Object.assign({ op }, extra));
+    if (j.finalizada) return terminar(j);
+    aplicar(j.estado);
+  } catch(e){ toast(e.message, 4000); }
+}
+
+async function siguiente(){
+  if (E.idx >= E.total-1) return finalizar();
+  $('btnSiguiente').disabled = true;
+  await control('siguiente');
+  $('btnSiguiente').disabled = false;
+}
+
+async function finalizar(){
+  if (!confirm(E.modo==='evaluado' ? '¿Finalizar la sesión? Se registrará la pregunta actual.' : '¿Finalizar la sesión de práctica?')) return;
+  await control('finalizar');
+}
+
+function terminar(j){
+  escaneando = false;
+  if (stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  $('camMsg').hidden = false; $('btnCam').textContent = 'Activar cámara';
+  let h = `<p><b>${esc(E.grado)} ${esc(E.paralelo)} · ${esc(E.tema)}</b></p>`;
+  if (j.modo === 'practica') h += '<p>Sesión de práctica: no se guardaron resultados.</p>';
+  else {
+    h += '<p>Los resultados están en la pestaña Resultados de tu hoja.</p>';
+    if (j.correos){
+      h += `<p>Correos enviados: <b>${j.correos.enviados}</b></p>`;
+      if (j.correos.errores.length) h += '<p style="color:var(--mal)">' + j.correos.errores.map(esc).join('<br>') + '</p>';
+    } else h += '<p>Los correos no se enviaron automáticamente. Envíalos desde tu hoja: menú Tarjetas → Enviar correos de una sesión.</p>';
+  }
+  $('finResumen').innerHTML = h;
+  E = null;
+  mostrar('pFin');
+}
+
+/* ---------- diálogo de alumno ---------- */
+let tDlg = null;
+function abrirAlumno(t){
+  tDlg = t;
+  const a = E.alumnos.find(x=>x.t===t), aus = E.ausentes.includes(t);
+  $('dNombre').textContent = a.n;
+  $('dTarjeta').textContent = 'Tarjeta ' + t + (resp[t] ? ' · respuesta ' + resp[t] : '');
+  const letras = E.pregunta ? Object.keys(E.pregunta.op) : LETRAS;
+  $('dLetras').innerHTML = letras.map(L=>`<button style="background:${COLOR[L]}" aria-pressed="${resp[t]===L}" data-l="${L}" ${aus?'disabled':''}>${L}</button>`).join('');
+  $('dAusente').textContent = aus ? 'Marcar presente' : 'Marcar ausente';
+  $('dBorrar').disabled = aus || !resp[t];
+  $('dlg').showModal();
+}
+$('dLetras').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  resp[tDlg] = b.dataset.l; renderChips([tDlg]); programarEnvio(true); $('dlg').close();
+});
+$('dBorrar').onclick = ()=>{ delete resp[tDlg]; renderChips(); programarEnvio(true); $('dlg').close(); };
+$('dAusente').onclick = async ()=>{
+  const aus = E.ausentes.includes(tDlg);
+  $('dlg').close();
+  if (!aus) delete resp[tDlg];
+  await control('ausente', { tarjeta:tDlg, valor:!aus });
+};
+$('dCerrar').onclick = ()=>$('dlg').close();
+$('chips').addEventListener('click', e=>{ const b=e.target.closest('.chip'); if (b) abrirAlumno(+b.dataset.t); });
+
+/* ---------- pantalla encendida ---------- */
+async function pedirWakeLock(){ try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch(e){} }
+document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible' && E){ pedirWakeLock(); refrescar(); } });
+
+/* ---------- eventos ---------- */
+$('btnConectar').onclick = conectar;
+$('selGrado').onchange = cambiarGrado;
+$('mEval').onclick = ()=>elegirModo('evaluado');
+$('mPrac').onclick = ()=>elegirModo('practica');
+$('btnEmpezar').onclick = empezar;
+$('btnReanudar').onclick = reanudar;
+$('btnDesconectar').onclick = ()=>mostrar('pConexion');
+$('btnCam').onclick = alternarCamara;
+$('btnReabrir').onclick = ()=>control('abrir');
+$('proy').addEventListener('click', e=>{ const b=e.target.closest('button'); if (b) control('vista', { vista:b.dataset.v }); });
+$('btnRepetir').onclick = ()=>{ if (confirm('¿Repetir la pregunta? Se borrarán las respuestas de este intento.')) { resp = {}; lecturas = {}; control('repetir'); } };
+$('btnTimer').onclick = ()=>control('temporizador', { seg: E.timerFin ? 0 : (CFG.temporizadorSeg||30) });
+$('btnSiguiente').onclick = siguiente;
+$('btnFinalizar').onclick = finalizar;
+$('btnNueva').onclick = async ()=>{ try { CAT = await api('catalogo'); CFG = CAT.config; prepararInicio(); } catch(e){} mostrar('pInicio'); };
+
+/* ---------- arranque ---------- */
+(function(){
+  const q = new URLSearchParams(location.search);
+  if (q.get('api')) guardarLocal('api', q.get('api'));
+  if (q.get('k')) guardarLocal('clave', q.get('k'));
+  if (q.get('api') || q.get('k')) history.replaceState(null, '', location.pathname);
+  $('inApi').value = leerLocal('api'); $('inClave').value = leerLocal('clave');
+  mostrar('pConexion');
+  if ($('inApi').value && $('inClave').value) conectar();
+})();
+</script>
+</body>
+</html>
