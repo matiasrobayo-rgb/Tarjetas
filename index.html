@@ -78,6 +78,7 @@
   .chip.resp { background:#E9F0FB; border-color:var(--A); }
   .chip.bien { background:#E7F5EE; border-color:var(--bien); }
   .chip.mal { background:#FBEAE8; border-color:var(--mal); }
+  .chip.anu { background:#F1F4F8; border-color:var(--mal); border-style:dashed; color:var(--mal); }
   .chip.aus { background:repeating-linear-gradient(45deg,#F1F4F8,#F1F4F8 6px,#E4E9F0 6px,#E4E9F0 12px); color:var(--suave); }
   .chip.nuevo { animation:pulso .5s ease; }
   @keyframes pulso { 50% { transform:scale(1.08); } }
@@ -189,6 +190,7 @@
   <div class="fila letras" id="dLetras"></div>
   <div class="fila">
     <button id="dBorrar">Borrar respuesta</button>
+    <button id="dAnular" style="color:var(--mal)"></button>
     <button id="dAusente"></button>
   </div>
   <div class="fila"><button class="prim" id="dCerrar">Listo</button></div>
@@ -207,7 +209,7 @@ function letraLeida(id, c){ return LETRAS[(rotacion(c) + desfase(id)) % 4]; }
 
 const $ = id => document.getElementById(id);
 const COLOR = { A:'var(--A)', B:'var(--B)', C:'var(--C)', D:'var(--D)' };
-let API = '', CLAVE = '', CAT = null, CFG = {}, E = null, resp = {}, modo = 'evaluado';
+let API = '', CLAVE = '', CAT = null, CFG = {}, E = null, resp = {}, tiempos = {}, modo = 'evaluado';
 let desfaseReloj = 0, escaneando = false, stream = null, lecturas = {}, envioT = null, wake = null;
 
 /* ---------- utilidades ---------- */
@@ -289,6 +291,8 @@ function aplicar(est){
   E = est;
   desfaseReloj = est.ahora - Date.now();
   resp = Object.assign({}, est.resp);
+  tiempos = Object.assign({}, est.tiempos || {});
+  if (est.cfg) CFG = est.cfg;
   if (cambioPregunta) lecturas = {};
   render(cambioPregunta);
 }
@@ -324,12 +328,12 @@ function renderChips(nuevo){
   const n = presentes.filter(a=>resp[a.t]).length;
   $('sCuenta').innerHTML = `${n}<small> de ${presentes.length}</small>`;
   $('chips').innerHTML = E.alumnos.map(a=>{
-    const aus = E.ausentes.includes(a.t), r = resp[a.t];
+    const aus = E.ausentes.includes(a.t), anu = (E.anuladas||[]).includes(a.t), r = resp[a.t];
     let cls = 'chip';
-    if (aus) cls += ' aus'; else if (r) cls += ok ? (r===ok?' bien':' mal') : ' resp';
+    if (aus) cls += ' aus'; else if (anu) cls += ' anu'; else if (r) cls += ok ? (r===ok?' bien':' mal') : ' resp';
     if (nuevo && nuevo.includes(a.t)) cls += ' nuevo';
     const corto = a.n.split(' ')[0];
-    return `<button class="${cls}" data-t="${a.t}" aria-label="${esc(a.n)}"><span class="n">${a.t}${r&&!aus?' · '+r:''}</span><span class="r">${aus?'ausente':esc(corto)}</span></button>`;
+    return `<button class="${cls}" data-t="${a.t}" aria-label="${esc(a.n)}"><span class="n">${a.t}${r&&!aus?' · '+r:''}</span><span class="r">${aus?'ausente':anu?'anulada':esc(corto)}</span></button>`;
   }).join('');
 }
 
@@ -344,23 +348,43 @@ function reloj(){
 setInterval(reloj, 250);
 
 /* ---------- envío de respuestas ---------- */
-let pendiente = false;
+let pendiente = false, enviando = false;
 function programarEnvio(manual){
   pendiente = true;
   clearTimeout(envioT);
-  envioT = setTimeout(()=>enviar(manual), manual ? 100 : 700);
+  envioT = setTimeout(()=>enviar(manual).catch(()=>{}), manual ? 80 : 300);
+}
+function cargaRespuestas(){
+  const o = {};
+  Object.keys(resp).forEach(t => o[t] = [resp[t], tiempos[t] || (Date.now() + desfaseReloj)]);
+  return o;
 }
 async function enviar(manual){
   if (!E) return;
-  pendiente = false; clearTimeout(envioT);
+  pendiente = false; clearTimeout(envioT); enviando = true;
   try {
-    const j = await api('respuestas', { idx:E.idx, resp, manual:!!manual });
+    const j = await api('respuestas', { idx:E.idx, resp:cargaRespuestas(), manual:!!manual });
+    if (j.v) E.v = j.v;
     if (j.ignorado && j.idx !== undefined && j.idx !== E.idx) refrescar();
   } catch(e){ toast('Sin conexión, reintentando…'); programarEnvio(manual); throw e; }
+  finally { enviando = false; }
 }
 // Envía lo pendiente antes de cualquier acción que devuelva el estado del servidor
 async function vaciar(){ if (pendiente) await enviar(true); }
 async function refrescar(){ try { await vaciar(); const j = await api('estado'); aplicar(j.estado); } catch(e){} }
+// Consulta periódica para enterarse de lo que se hace desde la computadora del proyector
+let sincronizando = false;
+setInterval(async ()=>{
+  if (!E || pendiente || enviando || sincronizando || document.visibilityState !== 'visible' || !$('pSesion').classList.contains('activa')) return;
+  sincronizando = true;
+  try {
+    const j = await api('estado', { v:E.v });
+    if (!j.igual && j.estado && !pendiente && !enviando) aplicar(j.estado);
+  } catch(e){
+    if (/No hay sesión activa/.test(e.message) && E) terminar({ modo:E.modo, remoto:true });
+  }
+  sincronizando = false;
+}, 2500);
 
 /* ---------- cámara ---------- */
 async function activarCamara(){
@@ -405,7 +429,15 @@ function bucle(){
   setTimeout(bucle, 40);
 }
 
+// Descarta lecturas falsas pequeñas que aparecen pegadas a otra tarjeta (por ejemplo, sobre sus letras)
+function area(c){ let a=0; for(let i=0;i<4;i++){ const p=c[i], q=c[(i+1)%4]; a+=p.x*q.y-q.x*p.y; } return Math.abs(a)/2; }
+function filtrar(marcas){
+  const info = marcas.map(m => ({ m, a:area(m.corners), x:m.corners.reduce((s,p)=>s+p.x,0)/4, y:m.corners.reduce((s,p)=>s+p.y,0)/4 }));
+  return info.filter(i => !info.some(o => o !== i && o.a > i.a * 4 && Math.hypot(o.x-i.x, o.y-i.y) < Math.sqrt(o.a) * 1.2)).map(i => i.m);
+}
+
 function procesar(marcas, w, h){
+  marcas = filtrar(marcas);
   const o = $('overlay'); if (o.width!==w){ o.width=w; o.height=h; }
   const c = o.getContext('2d'); c.clearRect(0,0,w,h);
   if (!E) return;
@@ -414,10 +446,11 @@ function procesar(marcas, w, h){
     const t = m.id, alumno = E.alumnos.find(a=>a.t===t);
     if (vistos.has(t)) continue; vistos.add(t);
     const L = letraLeida(t, m.corners);
-    const valido = alumno && !E.ausentes.includes(t) && E.pregunta && L in E.pregunta.op;
+    const valido = alumno && !E.ausentes.includes(t) && !(E.anuladas||[]).includes(t) && E.pregunta && L in E.pregunta.op;
+    const fijo = resp[t] && CFG.permitirCambio === false;
     const prev = lecturas[t];
     lecturas[t] = { L, n: prev && prev.L===L ? prev.n+1 : 1 };
-    if (valido && abierto && lecturas[t].n >= 2 && resp[t] !== L){ resp[t] = L; nuevos.push(t); }
+    if (valido && abierto && !fijo && lecturas[t].n >= 2 && resp[t] !== L){ resp[t] = L; tiempos[t] = Date.now() + desfaseReloj; nuevos.push(t); }
     // dibujo
     c.lineWidth = Math.max(3, w/260);
     c.strokeStyle = !valido ? '#E7A33E' : (resp[t]===L ? '#2E9D6A' : '#FFFFFF');
@@ -465,7 +498,8 @@ function terminar(j){
   if (stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
   $('camMsg').hidden = false; $('btnCam').textContent = 'Activar cámara';
   let h = `<p><b>${esc(E.grado)} ${esc(E.paralelo)} · ${esc(E.tema)}</b></p>`;
-  if (j.modo === 'practica') h += '<p>Sesión de práctica: no se guardaron resultados.</p>';
+  if (j.remoto) h += '<p>La sesión ya no está activa.</p>';
+  else if (j.modo === 'practica') h += '<p>Sesión de práctica: no se guardaron resultados.</p>';
   else {
     h += '<p>Los resultados están en la pestaña Resultados de tu hoja.</p>';
     if (j.correos){
@@ -487,14 +521,25 @@ function abrirAlumno(t){
   $('dTarjeta').textContent = 'Tarjeta ' + t + (resp[t] ? ' · respuesta ' + resp[t] : '');
   const letras = E.pregunta ? Object.keys(E.pregunta.op) : LETRAS;
   $('dLetras').innerHTML = letras.map(L=>`<button style="background:${COLOR[L]}" aria-pressed="${resp[t]===L}" data-l="${L}" ${aus?'disabled':''}>${L}</button>`).join('');
+  const anu = (E.anuladas||[]).includes(t);
   $('dAusente').textContent = aus ? 'Marcar presente' : 'Marcar ausente';
-  $('dBorrar').disabled = aus || !resp[t];
+  $('dBorrar').disabled = aus || anu || !resp[t];
+  $('dAnular').textContent = anu ? 'Quitar anulación' : 'Anular';
+  $('dAnular').disabled = aus;
+  $('dLetras').querySelectorAll('button').forEach(b => b.disabled = aus || anu);
   $('dlg').showModal();
 }
 $('dLetras').addEventListener('click', e=>{
   const b = e.target.closest('button'); if (!b) return;
   resp[tDlg] = b.dataset.l; renderChips([tDlg]); programarEnvio(true); $('dlg').close();
 });
+$('dAnular').onclick = async ()=>{
+  const anu = (E.anuladas||[]).includes(tDlg);
+  if (!anu && !confirm('¿Anular la respuesta de este alumno? Valdrá 0 puntos.')) return;
+  $('dlg').close();
+  if (!anu){ delete resp[tDlg]; delete tiempos[tDlg]; }
+  await control('anular', { tarjeta:tDlg, valor:!anu });
+};
 $('dBorrar').onclick = ()=>{ delete resp[tDlg]; renderChips(); programarEnvio(true); $('dlg').close(); };
 $('dAusente').onclick = async ()=>{
   const aus = E.ausentes.includes(tDlg);
@@ -520,7 +565,7 @@ $('btnDesconectar').onclick = ()=>mostrar('pConexion');
 $('btnCam').onclick = alternarCamara;
 $('btnReabrir').onclick = ()=>control('abrir');
 $('proy').addEventListener('click', e=>{ const b=e.target.closest('button'); if (b) control('vista', { vista:b.dataset.v }); });
-$('btnRepetir').onclick = ()=>{ if (confirm('¿Repetir la pregunta? Se borrarán las respuestas de este intento.')) { resp = {}; lecturas = {}; control('repetir'); } };
+$('btnRepetir').onclick = ()=>{ if (confirm('¿Repetir la pregunta? Se borrarán las respuestas de este intento.')) { resp = {}; tiempos = {}; lecturas = {}; control('repetir'); } };
 $('btnTimer').onclick = ()=>control('temporizador', { seg: E.timerFin ? 0 : (CFG.temporizadorSeg||30) });
 $('btnSiguiente').onclick = siguiente;
 $('btnFinalizar').onclick = finalizar;
